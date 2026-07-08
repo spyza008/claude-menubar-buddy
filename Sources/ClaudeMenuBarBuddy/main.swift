@@ -22,7 +22,7 @@ func gifMenuItem(named name: String) -> NSMenuItem {
     let size = NSSize(width: 220, height: 90)
     let container = NSView(frame: NSRect(origin: .zero, size: size))
     let imageView = NSImageView(frame: NSRect(x: (size.width - 128) / 2, y: 5, width: 128, height: 64))
-    if let url = Bundle.module.url(forResource: name, withExtension: "gif"),
+    if let url = Bundle.module.url(forResource: name, withExtension: "gif", subdirectory: "Resources"),
        let image = NSImage(contentsOf: url) {
         image.size = NSSize(width: 128, height: 64)
         imageView.image = image
@@ -49,6 +49,15 @@ func formatTokens(_ n: Int) -> String {
     return "\(n)"
 }
 
+func availableSpecies() -> [String] {
+    guard let url = Bundle.module.url(forResource: "species", withExtension: "txt", subdirectory: "Resources"),
+          let text = try? String(contentsOf: url, encoding: .utf8) else {
+        return ["buddy"]
+    }
+    let names = text.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+    return names.isEmpty ? ["buddy"] : names
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem!
     var timer: Timer?
@@ -69,6 +78,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var fiveHourLineItem: NSMenuItem!
     var weeklyLineItem: NSMenuItem!
 
+    var selectedSpecies: String {
+        get { UserDefaults.standard.string(forKey: "selectedSpecies") ?? "buddy" }
+        set { UserDefaults.standard.set(newValue, forKey: "selectedSpecies") }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
 
@@ -84,7 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func buildIdleMenu() {
         let menu = NSMenu()
         menu.delegate = self
-        menu.addItem(gifMenuItem(named: "buddy_idle"))
+        menu.addItem(gifMenuItem(named: "\(selectedSpecies)_idle"))
         menu.addItem(withTitle: "No pending requests", action: nil, keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
         statusLineItem = statusMenuItem("○ Idle")
@@ -99,8 +113,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(fiveHourLineItem)
         menu.addItem(weeklyLineItem)
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(buildSpeciesSubmenuItem())
         menu.addItem(withTitle: "Quit", action: #selector(quit), keyEquivalent: "q")
         idleMenu = menu
+    }
+
+    func buildSpeciesSubmenuItem() -> NSMenuItem {
+        let top = NSMenuItem(title: "Choose Buddy", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        for species in availableSpecies() {
+            let item = NSMenuItem(title: species.capitalized, action: #selector(chooseSpecies(_:)), keyEquivalent: "")
+            item.representedObject = species
+            item.target = self
+            item.state = (species == selectedSpecies) ? .on : .off
+            sub.addItem(item)
+        }
+        top.submenu = sub
+        return top
+    }
+
+    @objc func chooseSpecies(_ sender: NSMenuItem) {
+        guard let species = sender.representedObject as? String else { return }
+        selectedSpecies = species
+        buildIdleMenu()
+        setIdle()
     }
 
     // Fires right before the dropdown is shown to the user — usage/status
@@ -161,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         currentRequestId = req.id
 
         let menu = NSMenu()
-        menu.addItem(gifMenuItem(named: "buddy_pending"))
+        menu.addItem(gifMenuItem(named: "\(selectedSpecies)_pending"))
 
         let toolItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         toolItem.attributedTitle = NSAttributedString(

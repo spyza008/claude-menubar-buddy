@@ -12,11 +12,12 @@ hardcoded to any other machine. This folder (containing this SKILL.md,
 portable source — copy the whole folder to the target machine first if it
 isn't already there.
 
-**What this gives the user:** a 🐼 icon in their menu bar. When Claude Code
-needs a Bash/Write/Edit/WebFetch/NotebookEdit permission decision, it shows
-up there (with sound) instead of only in the terminal/Claude Desktop — click
-Allow or Deny. The menu also shows session status, tokens used today, and
-plan usage (5-hour + weekly limits), refreshed each time it's opened.
+**What this gives the user:** a menu bar icon (panda by default — 17 pets
+available via "Choose Buddy" in the menu). When Claude Code needs a
+Bash/Write/Edit/WebFetch/NotebookEdit permission decision, it shows up there
+(with sound) instead of only in the terminal/Claude Desktop — click Allow or
+Deny. The menu also shows session status, tokens used today, and plan usage
+(5-hour + weekly limits), refreshed each time it's opened.
 
 ## Prerequisites check
 
@@ -33,15 +34,25 @@ missing rather than guessing around it.
 
 ## Steps
 
-### 1. Generate the panda GIFs (once)
+### 1. Generate the GIFs (skip if already committed to the repo)
+
+The pet GIFs are checked into `Sources/ClaudeMenuBarBuddy/Resources/` —
+if they're already there (check `ls Sources/ClaudeMenuBarBuddy/Resources/*.gif`),
+skip this step. If missing (fresh clone without them, or adding more pets
+later), regenerate:
 
 ```bash
 cd <this-folder>
-python3 generate_gifs.py
+python3 generate_gifs.py           # panda (pixel-art)
+python3 generate_species_gifs.py   # the other 16 species (ASCII-art, requires
+                                    # a sibling checkout of the M5Stick Buddy
+                                    # firmware repo at the path hardcoded near
+                                    # the top of that script — adjust if not present)
 ```
 
-Confirm `Sources/ClaudeMenuBarBuddy/Resources/buddy_idle.gif` and
-`buddy_pending.gif` now exist.
+Confirm `Sources/ClaudeMenuBarBuddy/Resources/species.txt` lists the
+available pets, and that a `<name>_idle.gif` / `<name>_pending.gif` pair
+exists for each one.
 
 ### 2. Build
 
