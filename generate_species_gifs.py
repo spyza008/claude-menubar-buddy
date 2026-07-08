@@ -80,8 +80,12 @@ def render_species(path):
 
     # 5-hour-limit mood states, reusing the firmware's own poses instead of
     # inventing new art: doBusy (slight strain) = "tired", doDizzy (wobbly,
-    # dazed eyes) = "sleepy", doSleep (eyes shut) = "asleep".
-    mood_fns = {"tired": "doBusy", "sleepy": "doDizzy", "asleep": "doSleep"}
+    # dazed eyes) = "sleepy", doSleep (eyes shut) = "asleep". doHeart = pet
+    # was clicked, doCelebrate = the 5-hour limit just reset back to healthy.
+    mood_fns = {
+        "tired": "doBusy", "sleepy": "doDizzy", "asleep": "doSleep",
+        "heart": "doHeart", "celebrate": "doCelebrate",
+    }
     for mood, fn in mood_fns.items():
         frame = first_array_in_function(src, fn)
         if not frame:

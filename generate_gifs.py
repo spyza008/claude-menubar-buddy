@@ -50,15 +50,33 @@ SLEEPY = [  # eyes fully shut, still upright
 ]
 ASLEEP = SLEEPY  # same face; Zzz + no bounce is what sells "asleep" (added at render time)
 
+HEART = [  # clicked/petted — pink heart-shaped eyes
+    "...KK......KK...", "..KKKK....KKKK..", "..KKKK....KKKK..",
+    "...WWWWWWWWWW...", "..WWWWWWWWWWWW..", ".WWWPPW..WPPWWW.",
+    ".WWWPPW..WPPWWW.", ".WWWWWWWKKWWWWW.", ".WWWWWWWWWWWWWW.",
+    "..WWWWWWWWWWWW..", "..WWWWWWWWWWWW..", ".WWWWWWWWWWWWWW.",
+    ".WWWWWWWWWWWWWW.", "KWWWW......WWWWK", "KKWWW......WWWKK",
+    "..KK........KK..",
+]
+CELEBRATE = [  # 5-hour limit just reset — arms-up, wide happy eyes
+    "...KK......KK...", "..KKKK....KKKK..", "..KKKK....KKKK..",
+    "...WWWWWWWWWW...", "..WWWWWWWWWWWW..", ".WWKKKW..WKKKWW.",
+    ".WWKKKW..WKKKWW.", ".WWWWWWWKKWWWWW.", ".WWWWWWWWWWWWWW.",
+    "K.WWWWWWWWWWWW.K", "KK.WWWWWWWWWW.KK", ".WWWWWWWWWWWWWW.",
+    ".WWWWWWWWWWWWWW.", "KWWWW......WWWWK", "KKWWW......WWWKK",
+    "..KK........KK..",
+]
+
 COLORS = {"K": (132, 136, 140, 255), "W": (255, 255, 255, 255),
           "P": (255, 77, 148, 255), ".": (0, 0, 0, 0)}
 
 
-def render(grid, yoff=0, zzz_offset=None):
+def render(grid, yoff=0, marks=None):
+    """marks: list of (glyph, x, y, color) drawn in headroom above the
+    sprite — used for the drifting "Z" (asleep) and celebrate sparkles."""
     w = max(len(r) for r in grid) * PPX
     h = len(grid) * PPX
-    # Leave headroom above the sprite for a drifting "Z" when asleep.
-    pad_top = 24 if zzz_offset is not None else 0
+    pad_top = 24 if marks else 0
     img = Image.new("RGBA", (w, h + pad_top), (0, 0, 0, 0))
     px = img.load()
     for r, row in enumerate(grid):
@@ -73,14 +91,14 @@ def render(grid, yoff=0, zzz_offset=None):
                     continue
                 for dx in range(PPX):
                     px[c * PPX + dx, yy] = color
-    if zzz_offset is not None:
+    if marks:
         d = ImageDraw.Draw(img)
         try:
             font = ImageFont.truetype("/System/Library/Fonts/Menlo.ttc", 16)
         except Exception:
             font = ImageFont.load_default()
-        dx, dy = zzz_offset
-        d.text((w - 34 + dx, 2 + dy), "Z", font=font, fill=(180, 200, 255, 230))
+        for glyph, x, y, color in marks:
+            d.text((x, y), glyph, font=font, fill=color)
     return img
 
 
@@ -105,11 +123,28 @@ save_gif(tired_frames, [600, 600], "Sources/ClaudeMenuBarBuddy/Resources/buddy_t
 sleepy_frames = [render(SLEEPY, 0), render(SLEEPY, -1)]
 save_gif(sleepy_frames, [900, 900], "Sources/ClaudeMenuBarBuddy/Resources/buddy_sleepy.gif")
 
+ZZZ = (180, 200, 255, 230)
+w0 = max(len(r) for r in ASLEEP) * PPX
 asleep_frames = [
-    render(ASLEEP, 0, zzz_offset=(0, 6)),
-    render(ASLEEP, 0, zzz_offset=(3, 0)),
-    render(ASLEEP, 0, zzz_offset=(6, -6)),
+    render(ASLEEP, 0, marks=[("Z", w0 - 34, 8, ZZZ)]),
+    render(ASLEEP, 0, marks=[("Z", w0 - 31, 2, ZZZ)]),
+    render(ASLEEP, 0, marks=[("Z", w0 - 28, -4, ZZZ)]),
 ]
 save_gif(asleep_frames, [500, 500, 500], "Sources/ClaudeMenuBarBuddy/Resources/buddy_asleep.gif")
 
-print("Wrote buddy_idle.gif, buddy_pending.gif, buddy_tired.gif, buddy_sleepy.gif, buddy_asleep.gif")
+# Heart: clicked/petted — pink heart eyes, tiny happy bounce
+heart_frames = [render(HEART, 0), render(HEART, -2)]
+save_gif(heart_frames, [200, 200], "Sources/ClaudeMenuBarBuddy/Resources/buddy_heart.gif")
+
+# Celebrate: 5-hour limit just reset — arms up + sparkles drifting past
+SPARK = (255, 210, 80, 255)
+w1 = max(len(r) for r in CELEBRATE) * PPX
+celebrate_frames = [
+    render(CELEBRATE, 0, marks=[("*", 4, 6, SPARK), ("*", w1 - 20, 10, SPARK)]),
+    render(CELEBRATE, -3, marks=[("*", 10, -2, SPARK), ("*", w1 - 26, 0, SPARK)]),
+    render(CELEBRATE, 0, marks=[("*", 4, 6, SPARK), ("*", w1 - 20, 10, SPARK)]),
+    render(CELEBRATE, -3, marks=[("*", 10, -2, SPARK), ("*", w1 - 26, 0, SPARK)]),
+]
+save_gif(celebrate_frames, [200, 200, 200, 200], "Sources/ClaudeMenuBarBuddy/Resources/buddy_celebrate.gif")
+
+print("Wrote buddy_idle/pending/tired/sleepy/asleep/heart/celebrate.gif")

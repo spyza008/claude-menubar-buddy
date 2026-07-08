@@ -31,14 +31,28 @@ struct PendingRequest: Decodable {
 
 // Returns the menu item plus the NSImageView inside it, so callers that need
 // to swap the GIF later (e.g. mood changes) don't have to rebuild the item.
-func gifMenuItem(named name: String) -> (NSMenuItem, NSImageView) {
+// If target/action are given, a transparent NSButton is layered over the
+// GIF so clicking the pet (even mid-menu-tracking) fires the action —
+// AppKit only reliably delivers clicks to real controls inside a custom
+// NSMenuItem view, not to plain NSViews/NSImageViews via gesture recognizers.
+func gifMenuItem(named name: String, target: AnyObject? = nil, action: Selector? = nil) -> (NSMenuItem, NSImageView) {
     let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     let size = NSSize(width: 220, height: 90)
     let container = NSView(frame: NSRect(origin: .zero, size: size))
-    let imageView = NSImageView(frame: NSRect(x: (size.width - 128) / 2, y: 5, width: 128, height: 64))
+    let frame = NSRect(x: (size.width - 128) / 2, y: 5, width: 128, height: 64)
+    let imageView = NSImageView(frame: frame)
     setGif(on: imageView, named: name)
     imageView.imageScaling = .scaleProportionallyUpOrDown
     container.addSubview(imageView)
+    if let target = target, let action = action {
+        let button = NSButton(frame: frame)
+        button.title = ""
+        button.isBordered = false
+        button.target = target
+        button.action = action
+        button.toolTip = "Pet the buddy"
+        container.addSubview(button)
+    }
     item.view = container
     return (item, imageView)
 }
@@ -97,6 +111,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var sessionsSubmenuTop: NSMenuItem!
     var petImageView: NSImageView!
     var petMoodLineItem: NSMenuItem!
+    // Tracks the last mood actually computed from usage, separate from
+    // whatever GIF is on screen right now — a "heart" or "celebrate" flash
+    // temporarily overrides the displayed GIF without losing track of what
+    // to revert to.
+    var lastComputedMood = "idle"
+    var flashWorkItem: DispatchWorkItem?
 
     // Thresholds match ClaudeBar's scheme (see the community-project survey):
     // <50% used = healthy, 50-80% = warning, >80% = critical. Persist the
@@ -137,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func buildIdleMenu() {
         let menu = NSMenu()
         menu.delegate = self
-        let (petItem, imageView) = gifMenuItem(named: "\(selectedSpecies)_idle")
+        let (petItem, imageView) = gifMenuItem(named: "\(selectedSpecies)_idle", target: self, action: #selector(petClicked))
         petImageView = imageView
         menu.addItem(petItem)
         petMoodLineItem = statusMenuItem("🐼 Active and happy")
@@ -312,11 +332,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func updatePetMood(_ fiveHourPct: Int?) {
         let mood = petMood(for: fiveHourPct)
+        // Was tired/sleepy/asleep last time we checked, and just dropped
+        // back to healthy — the 5-hour window rolled over. Worth a little
+        // fanfare instead of silently snapping back to the idle GIF.
+        if lastComputedMood != "idle" && mood == "idle" {
+            sendNotification(title: "Claude 5-hour limit refreshed", body: "Buddy is back and ready to go!")
+            flashMood("celebrate", for: 4.0)
+        }
+        lastComputedMood = mood
+        applyMoodGif(mood)
+    }
+
+    func applyMoodGif(_ mood: String) {
         setGif(on: petImageView, named: "\(selectedSpecies)_\(mood)")
         petMoodLineItem.attributedTitle = NSAttributedString(
             string: petMoodText(mood),
             attributes: [.foregroundColor: NSColor.secondaryLabelColor, .font: NSFont.systemFont(ofSize: 11)]
         )
+    }
+
+    // Shows a mood GIF ("heart" on click, "celebrate" on limit reset) for a
+    // few seconds, then reverts to whatever the current real mood is.
+    func flashMood(_ mood: String, for seconds: Double) {
+        flashWorkItem?.cancel()
+        applyMoodGif(mood)
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.applyMoodGif(self.lastComputedMood)
+        }
+        flashWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
+    @objc func petClicked() {
+        NSSound(named: "Tink")?.play()
+        flashMood("heart", for: 2.0)
     }
 
     @objc func revealSession(_ sender: NSMenuItem) {

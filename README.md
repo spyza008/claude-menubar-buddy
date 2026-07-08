@@ -19,6 +19,8 @@ When a permission request comes in, the icon changes, a sound plays, and the dro
 - **Session status** — idle / active, based on recent Claude Code session file activity
 - **Active Sessions submenu** — lists each active session's project path and how long ago it was last active; click one to reveal that project folder in Finder
 - **Mood pet** — the pet itself reacts to your 5-hour limit: active below 50%, visibly tired at 50%, sleepy-eyed at 80%, and fast asleep (with drifting Zzz) once the limit is hit — same joke for all 18 pets
+- **Pet the buddy** — click the pet in the dropdown for a happy heart-eyes reaction
+- **Celebrate on refresh** — when the 5-hour limit rolls back over to healthy, the pet throws a little arms-up celebration (with a notification) instead of silently snapping back to idle
 - **Token usage today** — summed from local session transcripts, no network calls
 - **Plan usage** — 5-hour and weekly limit bars, read from the same file Claude Desktop itself writes, color-coded (green/orange/red at 50%/80% used)
 - **Threshold notifications** — a macOS notification fires the first time a limit crosses into the warning (50%) or critical (80%) band, so you don't have to keep the menu open to notice
