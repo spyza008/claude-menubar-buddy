@@ -1,5 +1,8 @@
 # Claude Menu Bar Buddy
 
+<img width="336" height="432" alt="image" src="https://github.com/user-attachments/assets/6fe47a82-6fde-4d50-a02d-f74e664113a9" />
+
+
 A hardware-free, native macOS menu bar companion for [Claude Code](https://claude.com/claude-code) — a desk pet that reacts to permission requests (Allow/Deny), and shows session status, token usage, and plan limits at a glance.
 
 It's a software-only stand-in for Anthropic's [Claude Desktop Buddy](https://github.com/anthropics/claude-desktop-buddy) (the M5StickC-based BLE hardware pet). No soldering, no BLE pairing, no separate device — just a 🐼 in your menu bar.
