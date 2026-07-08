@@ -1,12 +1,23 @@
 import AppKit
 import Foundation
-import UserNotifications
 
 // Claude Menu Bar Buddy — hardware-free stand-in for the M5Stick Hardware
 // Buddy. A PreToolUse hook (~/.config/claude-menubar-buddy/hook.sh) writes
 // pending_request.json when Claude Code needs a permission decision; this
 // app polls for it, shows Approve/Deny in the menu bar, and writes back
 // response_<id>.json for the hook to pick up.
+
+// UNUserNotificationCenter requires a real .app bundle (mainBundle must have
+// a valid bundleProxyForCurrentProcess) — this runs as a raw SPM binary from
+// .build/debug, which crashes on launch if UserNotifications is touched at
+// all. osascript's "display notification" has no such requirement.
+func sendNotification(title: String, body: String) {
+    let script = "display notification \"\(body.replacingOccurrences(of: "\"", with: "'"))\" with title \"\(title.replacingOccurrences(of: "\"", with: "'"))\""
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+    task.arguments = ["-e", script]
+    try? task.run()
+}
 
 let dirURL = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent(".config/claude-menubar-buddy")
@@ -100,8 +111,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
-
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         buildIdleMenu()
@@ -232,12 +241,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard level > lastNotified else { return }
         setNotified(level)
         guard level > 0 else { return }
-        let content = UNMutableNotificationContent()
-        content.title = level >= 80 ? "Claude \(label) critical" : "Claude \(label) warning"
-        content.body = "\(label) usage is at \(pct)%."
-        content.sound = .default
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
+        let title = level >= 80 ? "Claude \(label) critical" : "Claude \(label) warning"
+        sendNotification(title: title, body: "\(label) usage is at \(pct)%.")
     }
 
     // Rebuilds the "Active Sessions" submenu in place — one item per session
