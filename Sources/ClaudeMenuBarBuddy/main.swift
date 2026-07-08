@@ -123,9 +123,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         buildIdleMenu()
         setIdle()
 
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        // .common (not just .default) so this keeps firing while an NSMenu
+        // dropdown is open — AppKit switches the run loop to .eventTracking
+        // mode during that time, and a plain scheduledTimer would go silent
+        // until the menu closes, delaying pending-request detection.
+        let t = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.poll()
         }
+        RunLoop.current.add(t, forMode: .common)
+        timer = t
     }
 
     func buildIdleMenu() {
