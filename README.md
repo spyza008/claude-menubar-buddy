@@ -1,0 +1,107 @@
+# Claude Menu Bar Buddy
+
+A hardware-free, native macOS menu bar companion for [Claude Code](https://claude.com/claude-code) — a desk pet that reacts to permission requests (Allow/Deny), and shows session status, token usage, and plan limits at a glance.
+
+It's a software-only stand-in for Anthropic's [Claude Desktop Buddy](https://github.com/anthropics/claude-desktop-buddy) (the M5StickC-based BLE hardware pet). No soldering, no BLE pairing, no separate device — just a 🐼 in your menu bar.
+
+## What it looks like
+
+*(Drop a screenshot at `docs/screenshot-idle.png` and it'll show here — panda + no pending requests, session status, tokens used today, 5-hour and weekly plan limits.)*
+
+When a permission request comes in, the icon changes, a sound plays, and the dropdown shows the tool + command with Allow/Deny buttons.
+
+## Features
+
+- **Approve/Deny in the menu bar** for Bash, Write, Edit, WebFetch, and NotebookEdit tool calls — an alternative to answering permission prompts in the terminal or Claude Desktop
+- **17 pet characters** to choose from (`Choose Buddy` submenu): a pixel-art panda plus 16 ASCII-art pets reused from the M5Stick Hardware Buddy firmware (cat, turtle, dragon, ghost, robot, and more)
+- **Session status** — idle / active, based on recent Claude Code session file activity
+- **Token usage today** — summed from local session transcripts, no network calls
+- **Plan usage** — 5-hour and weekly limit bars, read from the same file Claude Desktop itself writes
+- **Login item** — starts automatically, no manual launch needed
+- Everything updates fresh each time you open the menu (no background polling wasting CPU)
+
+## How it works
+
+A `PreToolUse` hook (`hook.sh`) is registered in `~/.claude/settings.json`. When Claude Code is about to run a tool that needs a permission decision, the hook:
+
+1. Writes the request (tool name + command/file/URL) to `~/.config/claude-menubar-buddy/pending_request.json`
+2. Polls for a response file for up to 60 seconds
+3. If you click Allow/Deny in the menu bar app, it writes `response_<id>.json`, which the hook picks up and returns as the tool decision
+4. If nothing responds in time, the hook returns nothing and Claude Code falls back to its normal interactive prompt — so this is additive, never a single point of failure
+
+No BLE, no external device, no cloud service — just local files.
+
+## Install
+
+See [`SKILL.md`](./SKILL.md) — it's written as a self-install skill for Claude Code itself. Clone this repo, open it in Claude Code, and ask Claude to read `SKILL.md` and install it. Claude will:
+
+- generate the pet GIFs (if not already committed),
+- build the app with `swift build` (no Xcode required, just Command Line Tools),
+- install the hook script and merge the `PreToolUse` config into your own `~/.claude/settings.json` (never overwriting existing settings),
+- register a login item,
+- and launch it.
+
+You'll be asked to approve one native permission prompt along the way (editing `settings.json` itself is intentionally never auto-approved by a hook — that would be a way for a hook to grant itself more power unsupervised).
+
+### Manual install
+
+If you'd rather do it by hand:
+
+```bash
+git clone <this-repo>
+cd claude-menubar-buddy
+python3 generate_gifs.py            # panda
+python3 generate_species_gifs.py    # other 16 pets (needs claude-desktop-buddy checked out too — see script header)
+swift build
+mkdir -p ~/.config/claude-menubar-buddy
+cp hook.sh ~/.config/claude-menubar-buddy/hook.sh
+chmod +x ~/.config/claude-menubar-buddy/hook.sh
+```
+
+Then merge the `hooks.PreToolUse` block from `SKILL.md` into `~/.claude/settings.json` yourself (use your actual home directory in the `command` path, not `~`), and optionally set up the LaunchAgent plist shown there for auto-start at login.
+
+## Requirements
+
+- macOS 13+
+- Swift 5.9+ (Xcode Command Line Tools — `xcode-select --install`)
+- Python 3 with Pillow (`pip3 install Pillow`) — only needed to (re)generate GIFs
+- `jq` (`brew install jq`) — used by the hook script
+
+## Project layout
+
+```
+Package.swift                          # Swift Package manifest
+Sources/ClaudeMenuBarBuddy/
+  main.swift                           # menu bar UI, hook polling, species picker
+  UsageStats.swift                     # reads session JSONL + plan-usage-history.json
+  Resources/                           # generated GIFs + species.txt (checked in)
+hook.sh                                # the PreToolUse hook script
+generate_gifs.py                       # renders the pixel-art panda GIFs
+generate_species_gifs.py               # extracts ASCII pets from claude-desktop-buddy and renders them
+SKILL.md                               # self-install instructions for Claude Code
+```
+
+## Uninstall
+
+```bash
+launchctl bootout gui/$(id -u)/com.claudemenubarbuddy.app   # or your LaunchAgent label
+rm ~/Library/LaunchAgents/com.claudemenubarbuddy.app.plist
+rm -rf ~/.config/claude-menubar-buddy
+```
+
+Then remove the `hooks.PreToolUse` entries pointing at `claude-menubar-buddy/hook.sh` from `~/.claude/settings.json`.
+
+## Why this exists instead of the hardware Buddy
+
+Both are complementary, not competing — see the [Claude Desktop Buddy](https://github.com/anthropics/claude-desktop-buddy) project if you want the physical version too. This one exists because:
+
+- No hardware to buy or wait for shipping on
+- No BLE pairing, no Developer Mode toggle in Claude Desktop required
+- Covers Claude Code's own permission hooks directly, which the BLE bridge doesn't see
+- Compiles fresh from source on your machine, so there's nothing to code-sign or notarize, and no Gatekeeper friction
+
+If a hardware Buddy is also paired, they don't conflict: this app's hook resolves the decision first (before a native prompt is even shown); if it times out, the request falls through to the normal prompt, which the hardware Buddy can also see and approve from.
+
+## License
+
+Personal project, no license file yet — ask before reusing outside personal use.
