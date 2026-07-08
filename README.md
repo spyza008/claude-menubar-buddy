@@ -6,7 +6,9 @@ It's a software-only stand-in for Anthropic's [Claude Desktop Buddy](https://git
 
 ## What it looks like
 
-*(Drop a screenshot at `docs/screenshot-idle.png` and it'll show here — panda + no pending requests, session status, tokens used today, 5-hour and weekly plan limits.)*
+![idle menu](docs/screenshot-idle.png)
+
+*(No pending requests · session status · tokens used today · 5-hour and weekly plan limits)*
 
 When a permission request comes in, the icon changes, a sound plays, and the dropdown shows the tool + command with Allow/Deny buttons.
 
