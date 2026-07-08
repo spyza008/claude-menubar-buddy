@@ -29,21 +29,26 @@ struct PendingRequest: Decodable {
     let hint: String
 }
 
-func gifMenuItem(named name: String) -> NSMenuItem {
+// Returns the menu item plus the NSImageView inside it, so callers that need
+// to swap the GIF later (e.g. mood changes) don't have to rebuild the item.
+func gifMenuItem(named name: String) -> (NSMenuItem, NSImageView) {
     let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     let size = NSSize(width: 220, height: 90)
     let container = NSView(frame: NSRect(origin: .zero, size: size))
     let imageView = NSImageView(frame: NSRect(x: (size.width - 128) / 2, y: 5, width: 128, height: 64))
-    if let url = Bundle.module.url(forResource: name, withExtension: "gif", subdirectory: "Resources"),
-       let image = NSImage(contentsOf: url) {
-        image.size = NSSize(width: 128, height: 64)
-        imageView.image = image
-        imageView.animates = true
-        imageView.imageScaling = .scaleProportionallyUpOrDown
-    }
+    setGif(on: imageView, named: name)
+    imageView.imageScaling = .scaleProportionallyUpOrDown
     container.addSubview(imageView)
     item.view = container
-    return item
+    return (item, imageView)
+}
+
+func setGif(on imageView: NSImageView, named name: String) {
+    guard let url = Bundle.module.url(forResource: name, withExtension: "gif", subdirectory: "Resources"),
+          let image = NSImage(contentsOf: url) else { return }
+    image.size = NSSize(width: 128, height: 64)
+    imageView.image = image
+    imageView.animates = true
 }
 
 func statusMenuItem(_ text: String) -> NSMenuItem {
@@ -90,6 +95,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var fiveHourLineItem: NSMenuItem!
     var weeklyLineItem: NSMenuItem!
     var sessionsSubmenuTop: NSMenuItem!
+    var petImageView: NSImageView!
+    var petMoodLineItem: NSMenuItem!
 
     // Thresholds match ClaudeBar's scheme (see the community-project survey):
     // <50% used = healthy, 50-80% = warning, >80% = critical. Persist the
@@ -124,7 +131,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func buildIdleMenu() {
         let menu = NSMenu()
         menu.delegate = self
-        menu.addItem(gifMenuItem(named: "\(selectedSpecies)_idle"))
+        let (petItem, imageView) = gifMenuItem(named: "\(selectedSpecies)_idle")
+        petImageView = imageView
+        menu.addItem(petItem)
+        petMoodLineItem = statusMenuItem("🐼 Active and happy")
+        menu.addItem(petMoodLineItem)
         menu.addItem(withTitle: "No pending requests", action: nil, keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
         statusLineItem = statusMenuItem("○ Idle")
@@ -167,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         selectedSpecies = species
         buildIdleMenu()
         setIdle()
+        updatePetMood(usage.fiveHourPct)
     }
 
     // Fires right before the dropdown is shown to the user — usage/status
@@ -204,6 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 attributes: [.foregroundColor: thresholdColor(fh), .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)]
             )
             checkThreshold(pct: fh, label: "5-hour limit", lastNotified: notifiedFiveHour) { self.notifiedFiveHour = $0 }
+            updatePetMood(fh)
         }
         if let sd = usage.weeklyPct {
             weeklyLineItem.attributedTitle = NSAttributedString(
@@ -270,6 +283,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    // The pet's mood follows the 5-hour limit, not the weekly one — it's
+    // the one that actually blocks you mid-session, so it's the one worth
+    // dramatizing. <50% used = active, 50-79% = tired, 80-99% = sleepy,
+    // 100% = asleep.
+    func petMood(for pct: Int?) -> String {
+        guard let pct = pct else { return "idle" }
+        if pct >= 100 { return "asleep" }
+        if pct >= 80 { return "sleepy" }
+        if pct >= 50 { return "tired" }
+        return "idle"
+    }
+
+    func petMoodText(_ mood: String) -> String {
+        switch mood {
+        case "tired": return "😅 Getting tired..."
+        case "sleepy": return "😴 Getting sleepy..."
+        case "asleep": return "💤 Fast asleep (5h limit reached)"
+        default: return "🐼 Active and happy"
+        }
+    }
+
+    func updatePetMood(_ fiveHourPct: Int?) {
+        let mood = petMood(for: fiveHourPct)
+        setGif(on: petImageView, named: "\(selectedSpecies)_\(mood)")
+        petMoodLineItem.attributedTitle = NSAttributedString(
+            string: petMoodText(mood),
+            attributes: [.foregroundColor: NSColor.secondaryLabelColor, .font: NSFont.systemFont(ofSize: 11)]
+        )
+    }
+
     @objc func revealSession(_ sender: NSMenuItem) {
         guard let path = sender.representedObject as? String else { return }
         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
@@ -286,7 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         currentRequestId = req.id
 
         let menu = NSMenu()
-        menu.addItem(gifMenuItem(named: "\(selectedSpecies)_pending"))
+        menu.addItem(gifMenuItem(named: "\(selectedSpecies)_pending").0)
 
         let toolItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         toolItem.attributedTitle = NSAttributedString(

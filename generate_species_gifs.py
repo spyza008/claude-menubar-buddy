@@ -77,6 +77,19 @@ def render_species(path):
                    append_images=[idle_img], duration=[500, 500], loop=0)
     attn_img.save(pend_path, save_all=True,
                    append_images=[attn_img], duration=[250, 250], loop=0)
+
+    # 5-hour-limit mood states, reusing the firmware's own poses instead of
+    # inventing new art: doBusy (slight strain) = "tired", doDizzy (wobbly,
+    # dazed eyes) = "sleepy", doSleep (eyes shut) = "asleep".
+    mood_fns = {"tired": "doBusy", "sleepy": "doDizzy", "asleep": "doSleep"}
+    for mood, fn in mood_fns.items():
+        frame = first_array_in_function(src, fn)
+        if not frame:
+            continue
+        img = render_frame(frame)
+        img.save(f"{OUT_DIR}/{name}_{mood}.gif", save_all=True,
+                  append_images=[img], duration=[600, 600], loop=0)
+
     print(f"ok {name}")
     return name
 
