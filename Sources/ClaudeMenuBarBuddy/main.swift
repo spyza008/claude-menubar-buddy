@@ -39,7 +39,12 @@ func gifMenuItem(named name: String, target: AnyObject? = nil, action: Selector?
     let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     let size = NSSize(width: 220, height: 90)
     let container = NSView(frame: NSRect(origin: .zero, size: size))
-    let frame = NSRect(x: (size.width - 128) / 2, y: 5, width: 128, height: 64)
+    // Square frame, not 128x64 — the GIFs aren't 2:1 (buddy is 128x128,
+    // species art varies per pet), so a non-square box forced a squash.
+    // scaleProportionallyUpOrDown then letterboxes each pet's real aspect
+    // ratio inside this square instead of distorting it.
+    let side: CGFloat = 80
+    let frame = NSRect(x: (size.width - side) / 2, y: (size.height - side) / 2, width: side, height: side)
     let imageView = NSImageView(frame: frame)
     setGif(on: imageView, named: name)
     imageView.imageScaling = .scaleProportionallyUpOrDown
@@ -60,7 +65,9 @@ func gifMenuItem(named name: String, target: AnyObject? = nil, action: Selector?
 func setGif(on imageView: NSImageView, named name: String) {
     guard let url = Bundle.module.url(forResource: name, withExtension: "gif", subdirectory: "Resources"),
           let image = NSImage(contentsOf: url) else { return }
-    image.size = NSSize(width: 128, height: 64)
+    // Leave image.size at its native pixel dimensions (each GIF has its own
+    // aspect ratio) so .scaleProportionallyUpOrDown on the view fits it
+    // without distortion, instead of stretching everything to one fixed box.
     imageView.image = image
     imageView.animates = true
 }
