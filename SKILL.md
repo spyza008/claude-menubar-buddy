@@ -77,6 +77,17 @@ chmod +x ~/.config/claude-menubar-buddy/hook.sh
 
 ### 4. Wire the hook into Claude Code's settings
 
+**Back up the existing file first**, before any merge:
+
+```bash
+[ -f ~/.claude/settings.json ] && cp ~/.claude/settings.json ~/.claude/settings.json.bak.$(date +%Y%m%d%H%M%S)
+```
+
+This is a plain copy to a new filename, not an edit of `settings.json`
+itself, so it does not trigger the native permission prompt described below.
+Keep the backup even after a successful merge — it's the rollback path if
+the merge turns out wrong.
+
 Read `~/.claude/settings.json` first (create `{}` if it doesn't exist yet).
 **Merge, don't overwrite** — this user may already have other permissions or
 hooks configured. Add these `PreToolUse` entries (adjust if a `hooks` key

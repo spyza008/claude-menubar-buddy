@@ -17,8 +17,10 @@ When a permission request comes in, the icon changes, a sound plays, and the dro
 - **Approve/Deny in the menu bar** for Bash, Write, Edit, WebFetch, and NotebookEdit tool calls — an alternative to answering permission prompts in the terminal or Claude Desktop
 - **17 pet characters** to choose from (`Choose Buddy` submenu): a pixel-art panda plus 16 ASCII-art pets reused from the M5Stick Hardware Buddy firmware (cat, turtle, dragon, ghost, robot, and more)
 - **Session status** — idle / active, based on recent Claude Code session file activity
+- **Active Sessions submenu** — lists each active session's project path and how long ago it was last active; click one to reveal that project folder in Finder
 - **Token usage today** — summed from local session transcripts, no network calls
-- **Plan usage** — 5-hour and weekly limit bars, read from the same file Claude Desktop itself writes
+- **Plan usage** — 5-hour and weekly limit bars, read from the same file Claude Desktop itself writes, color-coded (green/orange/red at 50%/80% used)
+- **Threshold notifications** — a macOS notification fires the first time a limit crosses into the warning (50%) or critical (80%) band, so you don't have to keep the menu open to notice
 - **Login item** — starts automatically, no manual launch needed
 - Everything updates fresh each time you open the menu (no background polling wasting CPU)
 

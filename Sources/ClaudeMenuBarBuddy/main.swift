@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import UserNotifications
 
 // Claude Menu Bar Buddy — hardware-free stand-in for the M5Stick Hardware
 // Buddy. A PreToolUse hook (~/.config/claude-menubar-buddy/hook.sh) writes
@@ -77,6 +78,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var activityLineItem: NSMenuItem!
     var fiveHourLineItem: NSMenuItem!
     var weeklyLineItem: NSMenuItem!
+    var sessionsSubmenuTop: NSMenuItem!
+
+    // Thresholds match ClaudeBar's scheme (see the community-project survey):
+    // <50% used = healthy, 50-80% = warning, >80% = critical. Persist the
+    // highest threshold already notified-for per limit so we don't re-fire
+    // the same notification every time the menu happens to be opened.
+    var notifiedFiveHour: Int {
+        get { UserDefaults.standard.integer(forKey: "notifiedFiveHour") }
+        set { UserDefaults.standard.set(newValue, forKey: "notifiedFiveHour") }
+    }
+    var notifiedWeekly: Int {
+        get { UserDefaults.standard.integer(forKey: "notifiedWeekly") }
+        set { UserDefaults.standard.set(newValue, forKey: "notifiedWeekly") }
+    }
 
     var selectedSpecies: String {
         get { UserDefaults.standard.string(forKey: "selectedSpecies") ?? "buddy" }
@@ -85,6 +100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         buildIdleMenu()
@@ -112,6 +129,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(fiveHourLineItem)
         menu.addItem(weeklyLineItem)
+        menu.addItem(NSMenuItem.separator())
+        sessionsSubmenuTop = NSMenuItem(title: "Active Sessions", action: nil, keyEquivalent: "")
+        sessionsSubmenuTop.submenu = NSMenu()
+        menu.addItem(sessionsSubmenuTop)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(buildSpeciesSubmenuItem())
         menu.addItem(withTitle: "Quit", action: #selector(quit), keyEquivalent: "q")
@@ -149,8 +170,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func updateUsageLabels() {
-        let statusText = usage.activeSessions > 0
-            ? "● Active — \(usage.activeSessions) session\(usage.activeSessions == 1 ? "" : "s")"
+        let count = usage.activeSessions.count
+        let statusText = count > 0
+            ? "● Active — \(count) session\(count == 1 ? "" : "s")"
             : "○ Idle"
         statusLineItem.attributedTitle = NSAttributedString(
             string: statusText,
@@ -170,20 +192,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let fh = usage.fiveHourPct {
             fiveHourLineItem.attributedTitle = NSAttributedString(
                 string: "5-hour limit: \(bar(fh)) \(fh)%",
-                attributes: [.foregroundColor: NSColor.labelColor, .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)]
+                attributes: [.foregroundColor: thresholdColor(fh), .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)]
             )
+            checkThreshold(pct: fh, label: "5-hour limit", lastNotified: notifiedFiveHour) { self.notifiedFiveHour = $0 }
         }
         if let sd = usage.weeklyPct {
             weeklyLineItem.attributedTitle = NSAttributedString(
                 string: "Weekly limit: \(bar(sd)) \(sd)%",
-                attributes: [.foregroundColor: NSColor.labelColor, .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)]
+                attributes: [.foregroundColor: thresholdColor(sd), .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)]
             )
+            checkThreshold(pct: sd, label: "Weekly limit", lastNotified: notifiedWeekly) { self.notifiedWeekly = $0 }
         }
+        updateSessionsSubmenu()
     }
 
     func bar(_ pct: Int, width: Int = 10) -> String {
         let filled = min(width, max(0, pct * width / 100))
         return String(repeating: "▓", count: filled) + String(repeating: "░", count: width - filled)
+    }
+
+    // <50% used = healthy, 50-80% = warning, >80% = critical.
+    func thresholdColor(_ pct: Int) -> NSColor {
+        if pct >= 80 { return .systemRed }
+        if pct >= 50 { return .systemOrange }
+        return .systemGreen
+    }
+
+    func thresholdLevel(_ pct: Int) -> Int {
+        if pct >= 80 { return 80 }
+        if pct >= 50 { return 50 }
+        return 0
+    }
+
+    // Fires a system notification the first time a limit crosses into a new,
+    // higher threshold band. `lastNotified` guards against re-firing every
+    // time the menu is opened while still in the same band.
+    func checkThreshold(pct: Int, label: String, lastNotified: Int, setNotified: @escaping (Int) -> Void) {
+        let level = thresholdLevel(pct)
+        guard level > lastNotified else { return }
+        setNotified(level)
+        guard level > 0 else { return }
+        let content = UNMutableNotificationContent()
+        content.title = level >= 80 ? "Claude \(label) critical" : "Claude \(label) warning"
+        content.body = "\(label) usage is at \(pct)%."
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    // Rebuilds the "Active Sessions" submenu in place — one item per session
+    // showing its project path + minutes since last activity, clicking it
+    // reveals the project folder in Finder.
+    func updateSessionsSubmenu() {
+        guard let submenu = sessionsSubmenuTop.submenu else { return }
+        submenu.removeAllItems()
+        if usage.activeSessions.isEmpty {
+            submenu.addItem(withTitle: "No active sessions", action: nil, keyEquivalent: "")
+            sessionsSubmenuTop.title = "Active Sessions"
+            return
+        }
+        sessionsSubmenuTop.title = "Active Sessions (\(usage.activeSessions.count))"
+        for session in usage.activeSessions.sorted(by: { $0.lastActivity > $1.lastActivity }) {
+            let mins = max(0, Int(Date().timeIntervalSince(session.lastActivity) / 60))
+            let item = NSMenuItem(
+                title: "\(session.projectPath) — \(mins)m ago",
+                action: #selector(revealSession(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = session.projectPath
+            submenu.addItem(item)
+        }
+    }
+
+    @objc func revealSession(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String else { return }
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
     }
 
     func setIdle() {

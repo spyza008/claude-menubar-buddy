@@ -4,9 +4,14 @@ import Foundation
 // to derive usage/status info. No network calls, no Claude Desktop API needed —
 // these are the same JSONL files community dashboards like claude-usage read.
 
+struct ActiveSession {
+    var projectPath: String   // best-effort decoded folder path, for display + "reveal in Finder"
+    var lastActivity: Date
+}
+
 struct UsageSnapshot {
     var tokensToday: Int = 0
-    var activeSessions: Int = 0
+    var activeSessions: [ActiveSession] = []
     var lastActivity: Date? = nil
     var fiveHourPct: Int? = nil
     var weeklyPct: Int? = nil
@@ -31,6 +36,15 @@ enum UsageReader {
         return (u["fh"] as? Int, u["sd"] as? Int)
     }
 
+    /// Claude Code encodes a session's working directory into its project
+    /// folder name by replacing "/" with "-" (e.g. a project at
+    /// /Users/ray/Agent becomes a folder named "-Users-ray-Agent"). This is
+    /// lossy if the real path itself contains "-", so treat the result as
+    /// best-effort display text, not a guaranteed-correct path.
+    static func decodeProjectFolderName(_ name: String) -> String {
+        name.hasPrefix("-") ? "/" + name.dropFirst().replacingOccurrences(of: "-", with: "/") : name
+    }
+
     /// Sums output_tokens from every `type: assistant` line whose message has
     /// a `usage` block, across every .jsonl file modified today. Streams each
     /// file line-by-line (FileHandle) rather than loading it fully into memory —
@@ -41,24 +55,32 @@ enum UsageReader {
         let startOfToday = Calendar.current.startOfDay(for: Date())
         let now = Date()
 
-        guard let enumerator = fm.enumerator(
-            at: projectsRoot, includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles]
+        guard let projectDirs = try? fm.contentsOfDirectory(
+            at: projectsRoot, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
         ) else { return result }
 
-        for case let url as URL in enumerator {
-            guard url.pathExtension == "jsonl" else { continue }
-            guard let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
-                  let mtime = attrs.contentModificationDate else { continue }
+        for projectDir in projectDirs {
+            guard (try? projectDir.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+            let projectPath = decodeProjectFolderName(projectDir.lastPathComponent)
 
-            if mtime >= startOfToday {
-                result.tokensToday += sumOutputTokens(in: url)
-            }
-            if now.timeIntervalSince(mtime) < 15 {
-                result.activeSessions += 1
-            }
-            if result.lastActivity == nil || mtime > result.lastActivity! {
-                result.lastActivity = mtime
+            guard let files = try? fm.contentsOfDirectory(
+                at: projectDir, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]
+            ) else { continue }
+
+            for url in files {
+                guard url.pathExtension == "jsonl" else { continue }
+                guard let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
+                      let mtime = attrs.contentModificationDate else { continue }
+
+                if mtime >= startOfToday {
+                    result.tokensToday += sumOutputTokens(in: url)
+                }
+                if now.timeIntervalSince(mtime) < 15 {
+                    result.activeSessions.append(ActiveSession(projectPath: projectPath, lastActivity: mtime))
+                }
+                if result.lastActivity == nil || mtime > result.lastActivity! {
+                    result.lastActivity = mtime
+                }
             }
         }
         let plan = readPlanUsage()
