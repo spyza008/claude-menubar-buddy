@@ -114,4 +114,6 @@ If a hardware Buddy is also paired, they don't conflict: this app's hook resolve
 
 ## License
 
-Personal project, no license file yet — ask before reusing outside personal use.
+[MIT](./LICENSE) — use it, fork it, modify it freely.
+
+16 of the 17 pet designs (all except the panda, which is original pixel art drawn for this project) are rendered from ASCII-art poses in Anthropic's [claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy) firmware (`src/buddies/*.cpp`), © 2026 Anthropic, PBC, also MIT licensed.
