@@ -1,0 +1,103 @@
+import Foundation
+
+// Reads Claude Code's local session transcripts (~/.claude/projects/**/*.jsonl)
+// to derive usage/status info. No network calls, no Claude Desktop API needed —
+// these are the same JSONL files community dashboards like claude-usage read.
+
+struct UsageSnapshot {
+    var tokensToday: Int = 0
+    var activeSessions: Int = 0
+    var lastActivity: Date? = nil
+    var fiveHourPct: Int? = nil
+    var weeklyPct: Int? = nil
+}
+
+enum UsageReader {
+    static let projectsRoot = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".claude/projects")
+
+    // Claude Desktop writes its own plan-usage polling results here — same
+    // numbers shown in its "Plan usage" panel (5-hour rolling limit, weekly
+    // limit). "fh" = five-hour %, "sd" = seven-day (weekly) %.
+    static let planUsageURL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Application Support/Claude/plan-usage-history.json")
+
+    static func readPlanUsage() -> (fiveHour: Int?, weekly: Int?) {
+        guard let data = try? Data(contentsOf: planUsageURL),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let samples = obj["samples"] as? [[String: Any]],
+              let last = samples.last,
+              let u = last["u"] as? [String: Any] else { return (nil, nil) }
+        return (u["fh"] as? Int, u["sd"] as? Int)
+    }
+
+    /// Sums output_tokens from every `type: assistant` line whose message has
+    /// a `usage` block, across every .jsonl file modified today. Streams each
+    /// file line-by-line (FileHandle) rather than loading it fully into memory —
+    /// these transcripts can be tens of MB.
+    static func snapshot() -> UsageSnapshot {
+        var result = UsageSnapshot()
+        let fm = FileManager.default
+        let startOfToday = Calendar.current.startOfDay(for: Date())
+        let now = Date()
+
+        guard let enumerator = fm.enumerator(
+            at: projectsRoot, includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return result }
+
+        for case let url as URL in enumerator {
+            guard url.pathExtension == "jsonl" else { continue }
+            guard let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let mtime = attrs.contentModificationDate else { continue }
+
+            if mtime >= startOfToday {
+                result.tokensToday += sumOutputTokens(in: url)
+            }
+            if now.timeIntervalSince(mtime) < 15 {
+                result.activeSessions += 1
+            }
+            if result.lastActivity == nil || mtime > result.lastActivity! {
+                result.lastActivity = mtime
+            }
+        }
+        let plan = readPlanUsage()
+        result.fiveHourPct = plan.fiveHour
+        result.weeklyPct = plan.weekly
+        return result
+    }
+
+    private static func sumOutputTokens(in url: URL) -> Int {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return 0 }
+        defer { try? handle.close() }
+
+        var total = 0
+        var buffer = Data()
+        let chunkSize = 1 << 20 // 1MB chunks
+
+        while true {
+            let chunk = handle.readData(ofLength: chunkSize)
+            if chunk.isEmpty { break }
+            buffer.append(chunk)
+
+            while let newlineRange = buffer.range(of: Data([0x0A])) {
+                let lineData = buffer.subdata(in: buffer.startIndex..<newlineRange.lowerBound)
+                buffer.removeSubrange(buffer.startIndex..<newlineRange.upperBound)
+                total += tokensFromLine(lineData)
+            }
+        }
+        if !buffer.isEmpty { total += tokensFromLine(buffer) }
+        return total
+    }
+
+    private static func tokensFromLine(_ data: Data) -> Int {
+        // Cheap pre-filter before paying for full JSON parsing.
+        guard let s = String(data: data, encoding: .utf8), s.contains("\"usage\"") else { return 0 }
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              obj["type"] as? String == "assistant",
+              let message = obj["message"] as? [String: Any],
+              let usage = message["usage"] as? [String: Any],
+              let out = usage["output_tokens"] as? Int else { return 0 }
+        return out
+    }
+}
