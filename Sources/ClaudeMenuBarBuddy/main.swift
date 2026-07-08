@@ -54,6 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var timer: Timer?
     var currentRequestId: String?
     var usage = UsageSnapshot()
+    // Belt-and-suspenders against the same request file being seen twice
+    // (e.g. the hook writes it again, or a filesystem event fires twice)
+    // right after we've already answered it.
+    var respondedIds = Set<String>()
 
     // Built once and reused — menuWillOpen updates these items' text in
     // place rather than swapping statusItem.menu out from under an
@@ -191,7 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
               let req = try? JSONDecoder().decode(PendingRequest.self, from: data) else {
             return
         }
-        if req.id != currentRequestId {
+        if req.id != currentRequestId && !respondedIds.contains(req.id) {
             setPending(req)
         }
     }
@@ -201,6 +205,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let responseURL = dirURL.appendingPathComponent("response_\(id).json")
         let payload = "{\"decision\":\"\(decision)\"}"
         try? payload.write(to: responseURL, atomically: true, encoding: .utf8)
+        // Remove the request file ourselves right away — don't wait for
+        // hook.sh's own poll loop to notice and delete it. Otherwise our
+        // poll() can see the still-there (already-answered) request on its
+        // next tick, treat it as new (currentRequestId was just reset to
+        // nil by setIdle()), and re-trigger setPending() — including a
+        // second, spurious Ping sound.
+        try? FileManager.default.removeItem(at: requestURL)
+        respondedIds.insert(id)
         setIdle()
     }
 
