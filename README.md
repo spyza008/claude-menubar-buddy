@@ -27,6 +27,7 @@ When a permission request comes in, the icon changes, a sound plays, and the dro
 - **Token usage today** — summed from local session transcripts, no network calls
 - **Plan usage** — 5-hour and weekly limit bars, read from the same file Claude Desktop itself writes, color-coded (green/orange/red at 50%/80% used)
 - **Threshold notifications** — a macOS notification fires the first time a limit crosses into the warning (50%) or critical (80%) band, so you don't have to keep the menu open to notice
+- **Turn-finished notification** — get notified when a turn that took 30+ seconds finishes, so you don't have to keep tabbing back to check; quick back-and-forth stays silent
 - **Login item** — starts automatically, no manual launch needed
 - Everything updates fresh each time you open the menu (no background polling wasting CPU)
 

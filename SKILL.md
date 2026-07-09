@@ -64,16 +64,22 @@ swift build
 Confirm `Build complete!` and that
 `.build/debug/ClaudeMenuBarBuddy` exists and runs (`file .build/debug/ClaudeMenuBarBuddy`).
 
-### 3. Install the hook script
+### 3. Install the hook scripts
 
-`hook.sh` in this folder is already portable (it uses `$HOME`, not a
-hardcoded path). Copy it to the user's own config location:
+`hook.sh` and `notify-done.sh` in this folder are already portable (they use
+`$HOME`, not a hardcoded path). Copy both to the user's own config location:
 
 ```bash
 mkdir -p ~/.config/claude-menubar-buddy
 cp hook.sh ~/.config/claude-menubar-buddy/hook.sh
-chmod +x ~/.config/claude-menubar-buddy/hook.sh
+cp notify-done.sh ~/.config/claude-menubar-buddy/notify-done.sh
+chmod +x ~/.config/claude-menubar-buddy/hook.sh ~/.config/claude-menubar-buddy/notify-done.sh
 ```
+
+`notify-done.sh` is separate from `hook.sh` on purpose: it powers the
+turn-finished notification (see step 4b) and never needs a permission
+decision or the menu bar app to be running, so it doesn't share `hook.sh`'s
+polling/timeout logic.
 
 ### 4. Wire the hook into Claude Code's settings
 
@@ -111,6 +117,29 @@ Replace `ABSOLUTE_HOME` with this user's actual resolved home directory
 (e.g. from `echo $HOME`) — **do not use a literal `~`** in the `command`
 field; write out the real absolute path. This was verified working this way
 during development; don't assume `~` expansion without re-testing it.
+
+### 4b. Wire the turn-finished notification (optional but recommended)
+
+Add `UserPromptSubmit` and `Stop` entries alongside the `PreToolUse` block
+above — same file, no `matcher` field needed for these two events:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "ABSOLUTE_HOME/.config/claude-menubar-buddy/notify-done.sh", "timeout": 5 }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "ABSOLUTE_HOME/.config/claude-menubar-buddy/notify-done.sh", "timeout": 5 }] }
+    ]
+  }
+}
+```
+
+This fires a plain macOS notification ("Finished in 1m 20s — project-name")
+whenever a turn takes 30+ seconds — short back-and-forth stays silent since
+you're already watching. It's independent of the menu bar app being open;
+it calls `osascript` directly.
 
 Validate after writing:
 ```bash
