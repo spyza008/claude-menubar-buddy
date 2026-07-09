@@ -293,7 +293,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Rebuilds the "Active Sessions" submenu in place — one item per session
     // showing its project path + minutes since last activity, clicking it
-    // reveals the project folder in Finder.
+    // brings Claude Desktop to the front (not session-specific — Claude
+    // Code has no API to resume/focus one particular session, see
+    // revealSession's comment).
     func updateSessionsSubmenu() {
         guard let submenu = sessionsSubmenuTop.submenu else { return }
         submenu.removeAllItems()
@@ -311,7 +313,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 keyEquivalent: ""
             )
             item.target = self
-            item.representedObject = session.projectPath
             submenu.addItem(item)
         }
     }
@@ -376,9 +377,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         flashMood("heart", for: 2.0)
     }
 
+    // Claude Code has no public API to resume/focus a specific existing
+    // session — its claude-cli:// deep link only starts a NEW session in a
+    // directory (see code.claude.com/docs/en/deep-links), and Claude
+    // Desktop exposes no AppleScript/scripting interface at all. Best
+    // available: bring Claude Desktop to the front generically. Not
+    // session-specific, but closer to "go look at your sessions" than
+    // opening Finder was.
     @objc func revealSession(_ sender: NSMenuItem) {
-        guard let path = sender.representedObject as? String else { return }
-        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.anthropic.claudefordesktop") else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
 
     func setIdle() {
