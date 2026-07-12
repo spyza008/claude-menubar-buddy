@@ -182,6 +182,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     var floatingRefreshTickCounter = 0
     let floatingRefreshEveryTicks = 30
 
+    // Speech-bubble-style status label above the floating pet — shows
+    // tool+hint reusing the exact same PendingRequest data the dropdown
+    // already displays (2026-07-12: deliberately not a new hook/status
+    // channel, just surfacing data we already have).
+    var statusBubbleWindow: NSWindow?
+    var statusBubbleLabel: NSTextField?
+
     // Thresholds match ClaudeBar's scheme (see the community-project survey):
     // <50% used = healthy, 50-80% = warning, >80% = critical. Persist the
     // highest threshold already notified-for per limit so we don't re-fire
@@ -284,6 +291,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     func hideFloatingPet() {
         floatingWindow?.orderOut(nil)
+        hideStatusBubble()
+    }
+
+    // Small borderless panel positioned just above the floating pet,
+    // showing what it's currently waiting on approval for. Only exists
+    // while there's a real pending request — not a general "what is Claude
+    // doing" indicator (that would need a new hook covering every tool
+    // call, deliberately not built yet, see the chat about why).
+    func showStatusBubble(text: String) {
+        guard floatingPetVisible, let petWindow = floatingWindow else { return }
+        let bubbleWidth: CGFloat = 200
+        let bubbleHeight: CGFloat = 40
+        let window: NSWindow
+        let label: NSTextField
+        if let existing = statusBubbleWindow, let existingLabel = statusBubbleLabel {
+            window = existing
+            label = existingLabel
+        } else {
+            window = NSPanel(contentRect: NSRect(origin: .zero, size: NSSize(width: bubbleWidth, height: bubbleHeight)),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.level = .floating
+            window.hasShadow = true
+            window.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+            window.ignoresMouseEvents = true
+
+            let bubbleView = NSVisualEffectView(frame: NSRect(origin: .zero, size: NSSize(width: bubbleWidth, height: bubbleHeight)))
+            bubbleView.material = .hudWindow
+            bubbleView.state = .active
+            bubbleView.wantsLayer = true
+            bubbleView.layer?.cornerRadius = 10
+            bubbleView.layer?.masksToBounds = true
+            window.contentView = bubbleView
+
+            let textField = NSTextField(labelWithString: "")
+            textField.frame = NSRect(x: 8, y: 4, width: bubbleWidth - 16, height: bubbleHeight - 8)
+            textField.font = NSFont.systemFont(ofSize: 11)
+            textField.textColor = .labelColor
+            textField.alignment = .center
+            textField.lineBreakMode = .byTruncatingTail
+            textField.maximumNumberOfLines = 2
+            bubbleView.addSubview(textField)
+
+            statusBubbleWindow = window
+            statusBubbleLabel = textField
+            label = textField
+        }
+        label.stringValue = text
+        positionStatusBubble(above: petWindow)
+        window.orderFront(nil)
+    }
+
+    func hideStatusBubble() {
+        statusBubbleWindow?.orderOut(nil)
+    }
+
+    func positionStatusBubble(above petWindow: NSWindow) {
+        guard let bubble = statusBubbleWindow else { return }
+        let petFrame = petWindow.frame
+        let bubbleSize = bubble.frame.size
+        bubble.setFrameOrigin(NSPoint(
+            x: petFrame.midX - bubbleSize.width / 2,
+            y: petFrame.maxY + 6
+        ))
     }
 
     @objc func toggleFloatingPet() {
@@ -299,6 +371,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     func windowDidMove(_ notification: Notification) {
         guard let window = notification.object as? FloatingPetWindow else { return }
         UserDefaults.standard.set(NSStringFromPoint(window.frame.origin), forKey: "floatingPetOrigin")
+        if statusBubbleWindow?.isVisible == true {
+            positionStatusBubble(above: window)
+        }
     }
 
     func buildSpeciesSubmenuItem() -> NSMenuItem {
@@ -507,6 +582,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         statusItem.button?.title = "🐼"
         currentRequestId = nil
         statusItem.menu = idleMenu
+        hideStatusBubble()
     }
 
     func setPending(_ req: PendingRequest) {
@@ -536,6 +612,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.addItem(withTitle: "Quit", action: #selector(quit), keyEquivalent: "q")
         statusItem.menu = menu
 
+        showStatusBubble(text: "\(req.tool): \(String(req.hint.prefix(40)))")
         NSSound(named: "Ping")?.play()
     }
 
