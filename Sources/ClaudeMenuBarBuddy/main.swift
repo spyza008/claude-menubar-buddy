@@ -96,6 +96,30 @@ func availableSpecies() -> [String] {
     return names.isEmpty ? ["buddy"] : names
 }
 
+// window.isMovableByWindowBackground alone doesn't reliably drag when a
+// subview (here, an NSImageView filling the whole content area) is what
+// actually receives the mouseDown — the hit-tested view can swallow the
+// event before the window's own background-drag logic gets a chance, and
+// this was inconsistent enough in testing (2026-07-12) to just implement
+// dragging explicitly instead of trusting the flag.
+final class DraggablePetImageView: NSImageView {
+    private var dragStartMouseScreenLocation: NSPoint = .zero
+    private var dragStartWindowOrigin: NSPoint = .zero
+
+    override func mouseDown(with event: NSEvent) {
+        dragStartMouseScreenLocation = NSEvent.mouseLocation
+        dragStartWindowOrigin = window?.frame.origin ?? .zero
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let window = window else { return }
+        let current = NSEvent.mouseLocation
+        let dx = current.x - dragStartMouseScreenLocation.x
+        let dy = current.y - dragStartMouseScreenLocation.y
+        window.setFrameOrigin(NSPoint(x: dragStartWindowOrigin.x + dx, y: dragStartWindowOrigin.y + dy))
+    }
+}
+
 // Codex-style floating desktop pet: a borderless, always-on-top window that
 // shows just the panda GIF, draggable anywhere on screen, independent of
 // the menu bar dropdown. Deliberately minimal — no speech bubble, no
@@ -237,7 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         if floatingWindow == nil {
             let side: CGFloat = 120
             let window = FloatingPetWindow(size: NSSize(width: side, height: side))
-            let imageView = NSImageView(frame: NSRect(x: 0, y: 0, width: side, height: side))
+            let imageView = DraggablePetImageView(frame: NSRect(x: 0, y: 0, width: side, height: side))
             imageView.imageScaling = .scaleProportionallyUpOrDown
             setGif(on: imageView, named: "buddy_\(lastComputedMood)")
             window.contentView?.addSubview(imageView)
