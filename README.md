@@ -24,6 +24,7 @@ When a permission request comes in, the icon changes, a sound plays, and the dro
 - **Mood pet** — the pet itself reacts to your 5-hour limit: active below 50%, visibly tired at 50%, sleepy-eyed at 80%, and fast asleep (with drifting Zzz) once the limit is hit — same joke for all 18 pets
 - **Pet the buddy** — click the pet in the dropdown for a happy heart-eyes reaction
 - **Celebrate on refresh** — when the 5-hour limit rolls back over to healthy, the pet throws a little arms-up celebration (with a notification) instead of silently snapping back to idle
+- **Floating desktop pet** (Codex Pet-style) — an always-on-top, draggable panda that sits on your desktop independent of the menu bar dropdown, with the same mood system (tired/sleepy/asleep/celebrate) refreshed in the background every ~30s. Toggle from the menu (`Floating Pet`). Panda only for now.
 - **Token usage today** — summed from local session transcripts, no network calls
 - **Plan usage** — 5-hour and weekly limit bars, read from the same file Claude Desktop itself writes, color-coded (green/orange/red at 50%/80% used)
 - **Threshold notifications** — a macOS notification fires the first time a limit crosses into the warning (50%) or critical (80%) band, so you don't have to keep the menu open to notice

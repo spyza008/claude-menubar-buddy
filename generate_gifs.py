@@ -4,13 +4,15 @@ pixel-art grids used in the M5StickC Plus2 firmware (src/buddies/panda.cpp)."""
 
 from PIL import Image, ImageDraw, ImageFont
 
-PPX = 8  # pixels per art-cell, bigger than the M5Stick version since this
-         # renders in a menu dropdown, not a tiny 135px screen
+PPX = 10  # pixels per art-cell — bumped up from 8 (2026-07-12, for the
+          # floating always-on-top pet) for a crisper look at a size that's
+          # now also rendered outside a menu dropdown, standalone on the
+          # desktop where it needs to hold up next to Codex's pets
 
 BASE = [
     "...KK......KK...", "..KKKK....KKKK..", "..KKKK....KKKK..",
     "...WWWWWWWWWW...", "..WWWWWWWWWWWW..", ".WWWKKW..WKKWWW.",
-    ".WWWKKW..WKKWWW.", ".WWWWWWWKKWWWWW.", ".WWWWWWWWWWWWWW.",
+    ".WWWKKW..WKKWWW.", ".WBWWWWWKKWWWBW.", ".WWWWWWWWWWWWWW.",
     "..WWWWWWWWWWWW..", "..WWWWWWWWWWWW..", ".WWWWWWWWWWWWWW.",
     ".WWWWWWWWWWWWWW.", "KWWWW......WWWWK", "KKWWW......WWWKK",
     "..KK........KK..",
@@ -18,7 +20,7 @@ BASE = [
 BLINK = [
     "...KK......KK...", "..KKKK....KKKK..", "..KKKK....KKKK..",
     "...WWWWWWWWWW...", "..WWWWWWWWWWWW..", ".WWWKKW..WKKWWW.",
-    ".WWWWWW..WWWWWW.", ".WWWWWWWKKWWWWW.", ".WWWWWWWWWWWWWW.",
+    ".WWWWWW..WWWWWW.", ".WBWWWWWKKWWWBW.", ".WWWWWWWWWWWWWW.",
     "..WWWWWWWWWWWW..", "..WWWWWWWWWWWW..", ".WWWWWWWWWWWWWW.",
     ".WWWWWWWWWWWWWW.", "KWWWW......WWWWK", "KKWWW......WWWKK",
     "..KK........KK..",
@@ -26,7 +28,7 @@ BLINK = [
 WIDE = [
     "...KK......KK...", "..KKKK....KKKK..", "..KKKK....KKKK..",
     "...WWWWWWWWWW...", "..WWWWWWWWWWWW..", ".WWKKKW..WKKKWW.",
-    ".WWKKKW..WKKKWW.", ".WWKKKW..WKKKWW.", ".WWWWWWWKKWWWWW.",
+    ".WWKKKW..WKKKWW.", ".WWKKKW..WKKKWW.", ".WBWWWWWKKWWWBW.",
     "..WWWWWWWWWWWW..", "..WWWWWWWWWWWW..", ".WWWWWWWWWWWWWW.",
     ".WWWWWWWWWWWWWW.", "KWWWW......WWWWK", "KKWWW......WWWKK",
     "..KK........KK..",
@@ -35,7 +37,7 @@ WIDE = [
 TIRED = [  # half-lidded — top of eye droops shut, pupil still peeking below
     "...KK......KK...", "..KKKK....KKKK..", "..KKKK....KKKK..",
     "...WWWWWWWWWW...", "..WWWWWWWWWWWW..", ".WWWWWWW..WWWWWW.",
-    ".WWWKKW..WKKWWW.", ".WWWWWWWKKWWWWW.", ".WWWWWWWWWWWWWW.",
+    ".WWWKKW..WKKWWW.", ".WBWWWWWKKWWWBW.", ".WWWWWWWWWWWWWW.",
     "..WWWWWWWWWWWW..", "..WWWWWWWWWWWW..", ".WWWWWWWWWWWWWW.",
     ".WWWWWWWWWWWWWW.", "KWWWW......WWWWK", "KKWWW......WWWKK",
     "..KK........KK..",
@@ -43,7 +45,7 @@ TIRED = [  # half-lidded — top of eye droops shut, pupil still peeking below
 SLEEPY = [  # eyes fully shut, still upright
     "...KK......KK...", "..KKKK....KKKK..", "..KKKK....KKKK..",
     "...WWWWWWWWWW...", "..WWWWWWWWWWWW..", ".WWWWWWW..WWWWWW.",
-    ".WWWWWWW..WWWWWW.", ".WWWWWWWKKWWWWW.", ".WWWWWWWWWWWWWW.",
+    ".WWWWWWW..WWWWWW.", ".WBWWWWWKKWWWBW.", ".WWWWWWWWWWWWWW.",
     "..WWWWWWWWWWWW..", "..WWWWWWWWWWWW..", ".WWWWWWWWWWWWWW.",
     ".WWWWWWWWWWWWWW.", "KWWWW......WWWWK", "KKWWW......WWWKK",
     "..KK........KK..",
@@ -53,7 +55,7 @@ ASLEEP = SLEEPY  # same face; Zzz + no bounce is what sells "asleep" (added at r
 HEART = [  # clicked/petted — pink heart-shaped eyes
     "...KK......KK...", "..KKKK....KKKK..", "..KKKK....KKKK..",
     "...WWWWWWWWWW...", "..WWWWWWWWWWWW..", ".WWWPPW..WPPWWW.",
-    ".WWWPPW..WPPWWW.", ".WWWWWWWKKWWWWW.", ".WWWWWWWWWWWWWW.",
+    ".WWWPPW..WPPWWW.", ".WBWWWWWKKWWWBW.", ".WWWWWWWWWWWWWW.",
     "..WWWWWWWWWWWW..", "..WWWWWWWWWWWW..", ".WWWWWWWWWWWWWW.",
     ".WWWWWWWWWWWWWW.", "KWWWW......WWWWK", "KKWWW......WWWKK",
     "..KK........KK..",
@@ -61,14 +63,15 @@ HEART = [  # clicked/petted — pink heart-shaped eyes
 CELEBRATE = [  # 5-hour limit just reset — arms-up, wide happy eyes
     "...KK......KK...", "..KKKK....KKKK..", "..KKKK....KKKK..",
     "...WWWWWWWWWW...", "..WWWWWWWWWWWW..", ".WWKKKW..WKKKWW.",
-    ".WWKKKW..WKKKWW.", ".WWWWWWWKKWWWWW.", ".WWWWWWWWWWWWWW.",
+    ".WWKKKW..WKKKWW.", ".WBWWWWWKKWWWBW.", ".WWWWWWWWWWWWWW.",
     "K.WWWWWWWWWWWW.K", "KK.WWWWWWWWWW.KK", ".WWWWWWWWWWWWWW.",
     ".WWWWWWWWWWWWWW.", "KWWWW......WWWWK", "KKWWW......WWWKK",
     "..KK........KK..",
 ]
 
 COLORS = {"K": (132, 136, 140, 255), "W": (255, 255, 255, 255),
-          "P": (255, 77, 148, 255), ".": (0, 0, 0, 0)}
+          "P": (255, 77, 148, 255), "B": (255, 170, 190, 140),
+          ".": (0, 0, 0, 0)}
 
 
 def render(grid, yoff=0, marks=None):

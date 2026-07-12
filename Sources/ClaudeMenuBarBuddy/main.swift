@@ -96,7 +96,27 @@ func availableSpecies() -> [String] {
     return names.isEmpty ? ["buddy"] : names
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+// Codex-style floating desktop pet: a borderless, always-on-top window that
+// shows just the panda GIF, draggable anywhere on screen, independent of
+// the menu bar dropdown. Deliberately minimal — no speech bubble, no
+// click-to-chat (Claude Code has no API for that, see revealSession's
+// comment) — just ambient presence, which is the part that's actually
+// buildable today.
+final class FloatingPetWindow: NSWindow {
+    init(size: NSSize) {
+        super.init(contentRect: NSRect(origin: .zero, size: size),
+                    styleMask: [.borderless], backing: .buffered, defer: false)
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        level = .floating
+        isMovableByWindowBackground = true
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        ignoresMouseEvents = false
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     var statusItem: NSStatusItem!
     var timer: Timer?
     var currentRequestId: String?
@@ -125,6 +145,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var lastComputedMood = "idle"
     var flashWorkItem: DispatchWorkItem?
 
+    // Codex-style floating desktop pet — panda only (Ray, 2026-07-12).
+    var floatingWindow: FloatingPetWindow?
+    var floatingImageView: NSImageView?
+    var floatingPetVisible: Bool {
+        get { UserDefaults.standard.object(forKey: "floatingPetVisible") == nil ? true : UserDefaults.standard.bool(forKey: "floatingPetVisible") }
+        set { UserDefaults.standard.set(newValue, forKey: "floatingPetVisible") }
+    }
+    // How many 1s poll() ticks between background usage/mood refreshes for
+    // the floating pet — it has no "menu opened" moment to piggyback on
+    // like the dropdown does, so it needs its own cheap periodic check.
+    var floatingRefreshTickCounter = 0
+    let floatingRefreshEveryTicks = 30
+
     // Thresholds match ClaudeBar's scheme (see the community-project survey):
     // <50% used = healthy, 50-80% = warning, >80% = critical. Persist the
     // highest threshold already notified-for per limit so we don't re-fire
@@ -149,6 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         buildIdleMenu()
         setIdle()
+        if floatingPetVisible { showFloatingPet() }
 
         // .common (not just .default) so this keeps firing while an NSMenu
         // dropdown is open — AppKit switches the run loop to .eventTracking
@@ -188,8 +222,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(sessionsSubmenuTop)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(buildSpeciesSubmenuItem())
+        let floatingItem = NSMenuItem(title: "Floating Pet", action: #selector(toggleFloatingPet), keyEquivalent: "")
+        floatingItem.target = self
+        floatingItem.state = floatingPetVisible ? .on : .off
+        menu.addItem(floatingItem)
         menu.addItem(withTitle: "Quit", action: #selector(quit), keyEquivalent: "q")
         idleMenu = menu
+    }
+
+    // Codex-style floating pet — panda only, ambient status, no chat bubble
+    // (see FloatingPetWindow's comment for why). Position persists across
+    // launches; defaults to the bottom-right of the main screen.
+    func showFloatingPet() {
+        if floatingWindow == nil {
+            let side: CGFloat = 120
+            let window = FloatingPetWindow(size: NSSize(width: side, height: side))
+            let imageView = NSImageView(frame: NSRect(x: 0, y: 0, width: side, height: side))
+            imageView.imageScaling = .scaleProportionallyUpOrDown
+            setGif(on: imageView, named: "buddy_\(lastComputedMood)")
+            window.contentView?.addSubview(imageView)
+            window.delegate = self
+            if let saved = UserDefaults.standard.string(forKey: "floatingPetOrigin"),
+               NSPointFromString(saved) != .zero {
+                window.setFrameOrigin(NSPointFromString(saved))
+            } else if let screen = NSScreen.main {
+                let margin: CGFloat = 40
+                window.setFrameOrigin(NSPoint(
+                    x: screen.visibleFrame.maxX - side - margin,
+                    y: screen.visibleFrame.minY + margin
+                ))
+            }
+            floatingWindow = window
+            floatingImageView = imageView
+        }
+        floatingWindow?.orderFront(nil)
+    }
+
+    func hideFloatingPet() {
+        floatingWindow?.orderOut(nil)
+    }
+
+    @objc func toggleFloatingPet() {
+        floatingPetVisible.toggle()
+        if floatingPetVisible { showFloatingPet() } else { hideFloatingPet() }
+        buildIdleMenu()
+        if currentRequestId == nil {
+            setIdle()
+            updatePetMood(usage.fiveHourPct)
+        }
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        guard let window = notification.object as? FloatingPetWindow else { return }
+        UserDefaults.standard.set(NSStringFromPoint(window.frame.origin), forKey: "floatingPetOrigin")
     }
 
     func buildSpeciesSubmenuItem() -> NSMenuItem {
@@ -357,6 +442,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             string: petMoodText(mood),
             attributes: [.foregroundColor: NSColor.secondaryLabelColor, .font: NSFont.systemFont(ofSize: 11)]
         )
+        // Floating pet is panda-only regardless of the dropdown's species
+        // choice (Ray, 2026-07-12: "ทำแค่ panda ก็พอ").
+        if let floatingImageView = floatingImageView {
+            setGif(on: floatingImageView, named: "buddy_\(mood)")
+        }
     }
 
     // Shows a mood GIF ("heart" on click, "celebrate" on limit reset) for a
@@ -426,6 +516,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func poll() {
+        // Background usage/mood refresh, throttled — the floating pet has
+        // no "menu opened" moment to piggyback on like the dropdown does,
+        // so it needs its own periodic check. Full jsonl scan isn't free,
+        // hence every ~30s rather than every 1s tick.
+        if floatingPetVisible {
+            floatingRefreshTickCounter += 1
+            if floatingRefreshTickCounter >= floatingRefreshEveryTicks {
+                floatingRefreshTickCounter = 0
+                usage = UsageReader.snapshot()
+                if let fh = usage.fiveHourPct { updatePetMood(fh) }
+            }
+        }
+
         guard FileManager.default.fileExists(atPath: requestURL.path) else {
             if currentRequestId != nil { setIdle() }
             return
